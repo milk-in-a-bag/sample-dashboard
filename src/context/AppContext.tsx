@@ -117,6 +117,7 @@ interface AppContextType {
     password?: string;
     current_password?: string;
   }) => Promise<api.MeResponse>;
+  sessionChecked: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -137,6 +138,7 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
   );
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>("login");
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantLoading, setTenantLoading] = useState(false);
@@ -158,6 +160,31 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
     root.classList.toggle("dark", theme === "dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  // Rehydrate session from stored token on mount
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setSessionChecked(true);
+      return;
+    }
+    api
+      .getMe()
+      .then((me) => {
+        setCurrentUser({
+          id: me.user_id,
+          username: me.username,
+          role: me.role,
+          tenantId: "",
+        });
+        setCurrentPage("dashboard");
+      })
+      .catch(() => {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+      })
+      .finally(() => setSessionChecked(true));
+  }, []);
 
   const toggleTheme = () => setTheme((p) => (p === "dark" ? "light" : "dark"));
 
@@ -409,6 +436,7 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
         refreshHealth,
         getMe,
         updateMe,
+        sessionChecked,
       }}
     >
       {children}
