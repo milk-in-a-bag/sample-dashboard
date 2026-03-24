@@ -4,25 +4,48 @@ function getToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
+// Silent token refresh — returns true if a new access token was obtained
+async function tryRefresh(): Promise<boolean> {
+  const refresh = localStorage.getItem("refresh_token");
+  if (!refresh) return false;
+  try {
+    const res = await fetch(`${BASE}/api/token/refresh/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    localStorage.setItem("access_token", data.access);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
-  useApiKey = false,
+  retried = false,
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
 
-  if (useApiKey) {
-    const apiKey = localStorage.getItem("api_key");
-    if (apiKey) headers["X-API-Key"] = apiKey;
-  } else {
-    const token = getToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-  }
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
+
+  // Auto-refresh on 401 and retry once
+  if (res.status === 401 && !retried) {
+    const refreshed = await tryRefresh();
+    if (refreshed) return request<T>(path, options, true);
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    throw new Error("Session expired. Please log in again.");
+  }
 
   if (res.status === 204) return undefined as T;
 
@@ -32,6 +55,20 @@ async function request<T>(
     throw new Error(message);
   }
   return data as T;
+}
+
+// ── Health ────────────────────────────────────────────────────────────────────
+
+export interface HealthResponse {
+  status: "healthy" | "unhealthy";
+  database: "healthy" | "unhealthy";
+  timestamp: string;
+}
+
+export function getHealth() {
+  return fetch(`${BASE}/health`).then(
+    (r) => r.json() as Promise<HealthResponse>,
+  );
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -48,6 +85,28 @@ export function login(tenant_id: string, username: string, password: string) {
   return request<LoginResponse>("/api/auth/login/", {
     method: "POST",
     body: JSON.stringify({ tenant_id, username, password }),
+  });
+}
+
+export interface MeResponse {
+  user_id: string;
+  username: string;
+  email: string;
+  role: "admin" | "user" | "read_only";
+}
+
+export function getMe() {
+  return request<MeResponse>("/api/auth/me/");
+}
+
+export function updateMe(data: {
+  username?: string;
+  password?: string;
+  current_password?: string;
+}) {
+  return request<MeResponse>("/api/auth/me/update/", {
+    method: "PATCH",
+    body: JSON.stringify(data),
   });
 }
 
@@ -111,6 +170,18 @@ export function getTenantConfig() {
 export function deleteTenant() {
   return request<{ message: string }>("/api/tenants/delete/", {
     method: "DELETE",
+  });
+}
+
+export interface SubscriptionUpdateResponse extends TenantConfig {}
+
+export function updateSubscription(
+  tier: "free" | "professional" | "enterprise",
+  expiration_date: string,
+) {
+  return request<SubscriptionUpdateResponse>("/api/tenants/subscription/", {
+    method: "PUT",
+    body: JSON.stringify({ tier, expiration_date }),
   });
 }
 

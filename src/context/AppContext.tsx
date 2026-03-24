@@ -74,6 +74,10 @@ interface AppContextType {
   tenant: Tenant | null;
   tenantLoading: boolean;
   refreshTenant: () => Promise<void>;
+  updateSubscription: (
+    tier: "free" | "professional" | "enterprise",
+    expiration_date: string,
+  ) => Promise<void>;
   widgets: Widget[];
   widgetsLoading: boolean;
   refreshWidgets: () => Promise<void>;
@@ -104,6 +108,15 @@ interface AppContextType {
     end_date?: string;
     page?: number;
   }) => Promise<void>;
+  health: { status: string; database: string } | null;
+  healthLoading: boolean;
+  refreshHealth: () => Promise<void>;
+  getMe: () => Promise<api.MeResponse>;
+  updateMe: (data: {
+    username?: string;
+    password?: string;
+    current_password?: string;
+  }) => Promise<api.MeResponse>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -134,6 +147,11 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditPage, setAuditPage] = useState(1);
+  const [health, setHealth] = useState<{
+    status: string;
+    database: string;
+  } | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   useEffect(() => {
     const root = globalThis.document.documentElement;
@@ -169,6 +187,50 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
     } finally {
       setTenantLoading(false);
     }
+  };
+
+  const updateSubscription = async (
+    tier: "free" | "professional" | "enterprise",
+    expiration_date: string,
+  ) => {
+    const cfg = await api.updateSubscription(tier, expiration_date);
+    setTenant({
+      id: cfg.tenant_id,
+      status: cfg.status,
+      tier: cfg.subscription_tier,
+      createdAt: cfg.created_at,
+      rateLimit: cfg.rate_limit,
+      subscriptionExpiration: cfg.subscription_expiration,
+    });
+  };
+
+  const refreshHealth = async () => {
+    setHealthLoading(true);
+    try {
+      const h = await api.getHealth();
+      setHealth({ status: h.status, database: h.database });
+    } catch {
+      setHealth({ status: "unhealthy", database: "unhealthy" });
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  const getMe = () => api.getMe();
+
+  const updateMe = async (data: {
+    username?: string;
+    password?: string;
+    current_password?: string;
+  }) => {
+    const res = await api.updateMe(data);
+    // Keep currentUser in sync if username changed
+    if (data.username && currentUser) {
+      setCurrentUser((prev) =>
+        prev ? { ...prev, username: res.username } : prev,
+      );
+    }
+    return res;
   };
 
   const refreshWidgets = async () => {
@@ -254,8 +316,16 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
     if (currentUser) {
       refreshTenant();
       refreshWidgets();
+      refreshHealth();
     }
   }, [currentUser?.id]);
+
+  // Poll health every 60s
+  useEffect(() => {
+    refreshHealth();
+    const interval = setInterval(refreshHealth, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const createWidget = async (data: {
     name: string;
@@ -318,6 +388,7 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
         tenant,
         tenantLoading,
         refreshTenant,
+        updateSubscription,
         widgets,
         widgetsLoading,
         refreshWidgets,
@@ -333,6 +404,11 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
         auditPage,
         setAuditPage,
         refreshAuditLogs,
+        health,
+        healthLoading,
+        refreshHealth,
+        getMe,
+        updateMe,
       }}
     >
       {children}

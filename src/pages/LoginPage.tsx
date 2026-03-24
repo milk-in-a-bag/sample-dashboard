@@ -51,10 +51,11 @@ export function LoginPage() {
             </div>
 
             <Input
-              label="Username"
+              label="Username or Email"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin"
+              placeholder="admin or admin@example.com"
+              helperText="You can sign in with either"
             />
 
             <Input
