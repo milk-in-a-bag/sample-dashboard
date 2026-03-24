@@ -1,31 +1,29 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useApp, type Widget } from "../context/AppContext";
 import { Input } from "./ui/Input";
 import { Button } from "./ui/Button";
+
 interface WidgetFormProps {
   widget?: Widget | null;
   onClose: () => void;
 }
+
 export function WidgetForm({ widget, onClose }: WidgetFormProps) {
-  const { setWidgets, addToast, currentUser } = useApp();
+  const { createWidget, updateWidget, addToast } = useApp();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [metadata, setMetadata] = useState<
-    {
-      key: string;
-      value: string;
-    }[]
-  >([]);
+  const [metadata, setMetadata] = useState<{ key: string; value: string }[]>(
+    [],
+  );
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     if (widget) {
       setName(widget.name);
       setDescription(widget.description);
       setMetadata(
-        Object.entries(widget.metadata).map(([k, v]) => ({
-          key: k,
-          value: v,
-        })),
+        Object.entries(widget.metadata).map(([key, value]) => ({ key, value })),
       );
     } else {
       setName("");
@@ -33,28 +31,18 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
       setMetadata([]);
     }
   }, [widget]);
-  const handleAddMetadata = () => {
-    setMetadata([
-      ...metadata,
-      {
-        key: "",
-        value: "",
-      },
-    ]);
-  };
-  const handleRemoveMetadata = (index: number) => {
-    setMetadata(metadata.filter((_, i) => i !== index));
-  };
+
   const handleMetadataChange = (
     index: number,
     field: "key" | "value",
     val: string,
   ) => {
-    const newMeta = [...metadata];
-    newMeta[index][field] = val;
-    setMetadata(newMeta);
+    const next = [...metadata];
+    next[index][field] = val;
+    setMetadata(next);
   };
-  const handleSave = () => {
+
+  const handleSave = async () => {
     if (!name.trim()) {
       addToast("Name is required", "error");
       return;
@@ -63,33 +51,23 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
     metadata.forEach((m) => {
       if (m.key.trim()) metaObj[m.key.trim()] = m.value.trim();
     });
-    if (widget) {
-      setWidgets((prev) =>
-        prev.map((w) =>
-          w.id === widget.id
-            ? {
-                ...w,
-                name,
-                description,
-                metadata: metaObj,
-              }
-            : w,
-        ),
-      );
-      addToast("Widget updated successfully", "success");
-    } else {
-      const newWidget: Widget = {
-        id: `w-${Date.now()}`,
-        name,
-        description,
-        metadata: metaObj,
-        createdAt: new Date().toISOString(),
-      };
-      setWidgets((prev) => [newWidget, ...prev]);
-      addToast("Widget created successfully", "success");
+    setSaving(true);
+    try {
+      if (widget) {
+        await updateWidget(widget.id, { name, description, metadata: metaObj });
+        addToast("Widget updated successfully", "success");
+      } else {
+        await createWidget({ name, description, metadata: metaObj });
+        addToast("Widget created successfully", "success");
+      }
+      onClose();
+    } catch (e) {
+      addToast((e as Error).message, "error");
+    } finally {
+      setSaving(false);
     }
-    onClose();
   };
+
   return (
     <div className="space-y-6">
       <Input
@@ -99,12 +77,11 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
         placeholder="e.g. Auth Gateway"
         autoFocus
       />
-
       <Input
         label="Description"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        placeholder="Brief description of this widget's purpose"
+        placeholder="Brief description"
         textarea
         rows={3}
       />
@@ -118,10 +95,9 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={handleAddMetadata}
+            onClick={() => setMetadata([...metadata, { key: "", value: "" }])}
           >
-            <PlusIcon className="w-4 h-4 mr-1" />
-            Add field
+            <PlusIcon className="w-4 h-4 mr-1" /> Add field
           </Button>
         </div>
 
@@ -132,7 +108,7 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
         ) : (
           <div className="space-y-2">
             {metadata.map((item, index) => (
-              <div key={index} className="flex items-start gap-2">
+              <div key={`meta-${index}`} className="flex items-start gap-2">
                 <Input
                   className="flex-1 font-mono text-sm"
                   placeholder="key"
@@ -141,7 +117,6 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
                     handleMetadataChange(index, "key", e.target.value)
                   }
                 />
-
                 <Input
                   className="flex-1 font-mono text-sm"
                   placeholder="value"
@@ -150,13 +125,14 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
                     handleMetadataChange(index, "value", e.target.value)
                   }
                 />
-
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   className="px-2 text-zinc-400 hover:text-red-500"
-                  onClick={() => handleRemoveMetadata(index)}
+                  onClick={() =>
+                    setMetadata(metadata.filter((_, i) => i !== index))
+                  }
                 >
                   <XIcon className="w-4 h-4" />
                 </Button>
@@ -165,15 +141,19 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
           </div>
         )}
       </div>
+
+      {/* Hidden trigger for footer save button */}
+      <button id="hidden-save-btn" className="hidden" onClick={handleSave} />
     </div>
   );
 }
+
 export function WidgetFormFooter({
   onCancel,
   onSave,
 }: {
-  onCancel: () => void;
-  onSave: () => void;
+  readonly onCancel: () => void;
+  readonly onSave: () => void;
 }) {
   return (
     <div className="flex gap-3 w-full justify-end">

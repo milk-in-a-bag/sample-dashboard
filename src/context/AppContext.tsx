@@ -1,27 +1,32 @@
-import React, {
+import {
   useEffect,
   useState,
   createContext,
   useContext,
-  memo,
   type ReactNode,
 } from "react";
+import * as api from "../lib/api";
+
 export type Role = "admin" | "user" | "read_only";
 export type Theme = "dark" | "light";
 export type Page = "login" | "register" | "dashboard" | "settings" | "audit";
+
 export interface User {
+  id: string;
   username: string;
   role: Role;
   tenantId: string;
 }
+
 export interface Tenant {
   id: string;
-  name: string;
-  status: "active" | "pending_deletion" | "deleted";
-  tier: "free" | "professional" | "enterprise";
+  status: string;
+  tier: string;
   createdAt: string;
-  adminEmail: string;
+  rateLimit: number;
+  subscriptionExpiration: string;
 }
+
 export interface Widget {
   id: string;
   name: string;
@@ -29,269 +34,274 @@ export interface Widget {
   metadata: Record<string, string>;
   createdAt: string;
 }
+
 export interface ApiKey {
   id: string;
-  key: string;
   maskedKey: string;
   createdAt: string;
 }
+
 export interface AuditEvent {
   id: string;
   timestamp: string;
-  type: "auth" | "key" | "destructive" | "system";
-  actor: string;
-  ipAddress: string;
-  detail: string;
+  eventType: string;
+  userId: string | null;
+  ipAddress: string | null;
+  details: Record<string, unknown>;
 }
+
 export interface Toast {
   id: string;
   message: string;
   type: "success" | "error";
 }
+
 interface AppContextType {
   theme: Theme;
   toggleTheme: () => void;
   currentUser: User | null;
-  login: (tenantId: string, username: string, role?: Role) => void;
+  login: (
+    tenantId: string,
+    username: string,
+    password: string,
+  ) => Promise<void>;
   logout: () => void;
   currentPage: Page;
   navigate: (page: Page) => void;
   toasts: Toast[];
   addToast: (message: string, type: "success" | "error") => void;
   removeToast: (id: string) => void;
-  tenant: Tenant;
+  tenant: Tenant | null;
+  tenantLoading: boolean;
+  refreshTenant: () => Promise<void>;
   widgets: Widget[];
-  setWidgets: React.Dispatch<React.SetStateAction<Widget[]>>;
+  widgetsLoading: boolean;
+  refreshWidgets: () => Promise<void>;
+  createWidget: (data: {
+    name: string;
+    description?: string;
+    metadata?: Record<string, string>;
+  }) => Promise<void>;
+  updateWidget: (
+    id: string,
+    data: {
+      name: string;
+      description?: string;
+      metadata?: Record<string, string>;
+    },
+  ) => Promise<void>;
+  deleteWidget: (id: string) => Promise<void>;
   apiKeys: ApiKey[];
-  setApiKeys: React.Dispatch<React.SetStateAction<ApiKey[]>>;
+  generateApiKey: () => Promise<string>;
+  revokeApiKey: (id: string) => Promise<void>;
   auditEvents: AuditEvent[];
-  setAuditEvents: React.Dispatch<React.SetStateAction<AuditEvent[]>>;
+  auditLoading: boolean;
+  auditTotal: number;
+  auditPage: number;
+  setAuditPage: (page: number) => void;
+  refreshAuditLogs: (params?: {
+    start_date?: string;
+    end_date?: string;
+    page?: number;
+  }) => Promise<void>;
 }
-const defaultTenant: Tenant = {
-  id: "acme-corp",
-  name: "Acme Corp",
-  status: "active",
-  tier: "enterprise",
-  createdAt: "2023-11-12T08:00:00Z",
-  adminEmail: "admin@acmecorp.com",
-};
-const initialWidgets: Widget[] = [
-  {
-    id: "w-1",
-    name: "Auth Gateway",
-    description: "Primary authentication routing and token validation layer.",
-    metadata: {
-      region: "us-east-1",
-      version: "1.2.4",
-    },
-    createdAt: "2024-01-15T10:30:00Z",
-  },
-  {
-    id: "w-2",
-    name: "Rate Limiter",
-    description: "Redis-backed rate limiting for public API endpoints.",
-    metadata: {
-      limit: "1000/min",
-      strategy: "sliding_window",
-    },
-    createdAt: "2024-01-16T14:20:00Z",
-  },
-  {
-    id: "w-3",
-    name: "Cache Layer",
-    description:
-      "In-memory caching for frequently accessed tenant configurations.",
-    metadata: {
-      ttl: "3600",
-      max_memory: "2GB",
-    },
-    createdAt: "2024-02-01T09:15:00Z",
-  },
-  {
-    id: "w-4",
-    name: "Webhook Dispatcher",
-    description: "Delivers event payloads to registered external endpoints.",
-    metadata: {
-      retries: "3",
-      timeout: "5000ms",
-    },
-    createdAt: "2024-02-10T16:45:00Z",
-  },
-  {
-    id: "w-5",
-    name: "Metrics Aggregator",
-    description: "Collects and rolls up usage metrics for billing.",
-    metadata: {
-      interval: "1h",
-      retention: "90d",
-    },
-    createdAt: "2024-03-05T11:00:00Z",
-  },
-];
-
-const initialApiKeys: ApiKey[] = [
-  {
-    id: "k-1",
-    key: import.meta.env.VITE_API_KEY_LIVE ?? "",
-    maskedKey: "sk_live_••••••••WxYz",
-    createdAt: "2024-01-10T08:00:00Z",
-  },
-  {
-    id: "k-2",
-    key: import.meta.env.VITE_API_KEY_TEST ?? "",
-    maskedKey: "sk_test_••••••••WxYz",
-    createdAt: "2024-02-15T09:30:00Z",
-  },
-];
-
-const initialAuditEvents: AuditEvent[] = [
-  {
-    id: "a-1",
-    timestamp: "2024-03-19T08:12:45Z",
-    type: "auth",
-    actor: "admin",
-    ipAddress: "192.168.1.45",
-    detail: "Successful login",
-  },
-  {
-    id: "a-2",
-    timestamp: "2024-03-18T14:30:12Z",
-    type: "key",
-    actor: "admin",
-    ipAddress: "192.168.1.45",
-    detail: "Generated new API key (sk_test_...)",
-  },
-  {
-    id: "a-3",
-    timestamp: "2024-03-18T10:15:00Z",
-    type: "system",
-    actor: "system",
-    ipAddress: "10.0.0.1",
-    detail: "Automated backup completed",
-  },
-  {
-    id: "a-4",
-    timestamp: "2024-03-17T16:45:22Z",
-    type: "auth",
-    actor: "jdoe",
-    ipAddress: "203.0.113.42",
-    detail: "Failed login attempt",
-  },
-  {
-    id: "a-5",
-    timestamp: "2024-03-15T09:22:10Z",
-    type: "destructive",
-    actor: "admin",
-    ipAddress: "192.168.1.45",
-    detail: 'Deleted widget "Legacy Sync"',
-  },
-  {
-    id: "a-6",
-    timestamp: "2024-03-14T11:05:33Z",
-    type: "auth",
-    actor: "admin",
-    ipAddress: "192.168.1.45",
-    detail: "Successful logout",
-  },
-  {
-    id: "a-7",
-    timestamp: "2024-03-14T08:01:15Z",
-    type: "auth",
-    actor: "admin",
-    ipAddress: "192.168.1.45",
-    detail: "Successful login",
-  },
-];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-export function AppProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem("theme");
-    return (saved as Theme) || "dark";
-  });
+
+function mapWidget(w: api.ApiWidget): Widget {
+  return {
+    id: w.id,
+    name: w.name,
+    description: w.description ?? "",
+    metadata: w.metadata ?? {},
+    createdAt: w.created_at,
+  };
+}
+
+export function AppProvider({ children }: { readonly children: ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem("theme") as Theme) || "dark",
+  );
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>("login");
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [tenant] = useState<Tenant>(defaultTenant);
-  const [widgets, setWidgets] = useState<Widget[]>(initialWidgets);
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>(initialApiKeys);
-  const [auditEvents, setAuditEvents] =
-    useState<AuditEvent[]>(initialAuditEvents);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [tenantLoading, setTenantLoading] = useState(false);
+  const [widgets, setWidgets] = useState<Widget[]>([]);
+  const [widgetsLoading, setWidgetsLoading] = useState(false);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditPage, setAuditPage] = useState(1);
+
   useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+    const root = globalThis.document.documentElement;
+    root.classList.toggle("dark", theme === "dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+
+  const toggleTheme = () => setTheme((p) => (p === "dark" ? "light" : "dark"));
+
+  const addToast = (message: string, type: "success" | "error") => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => removeToast(id), 4000);
   };
-  const login = (tenantId: string, username: string, role: Role = "admin") => {
+
+  const removeToast = (id: string) =>
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  const refreshTenant = async () => {
+    setTenantLoading(true);
+    try {
+      const cfg = await api.getTenantConfig();
+      setTenant({
+        id: cfg.tenant_id,
+        status: cfg.status,
+        tier: cfg.subscription_tier,
+        createdAt: cfg.created_at,
+        rateLimit: cfg.rate_limit,
+        subscriptionExpiration: cfg.subscription_expiration,
+      });
+    } catch (e) {
+      addToast((e as Error).message, "error");
+    } finally {
+      setTenantLoading(false);
+    }
+  };
+
+  const refreshWidgets = async () => {
+    setWidgetsLoading(true);
+    try {
+      const page = await api.listWidgets({ page_size: 100 });
+      setWidgets(page.results.map(mapWidget));
+    } catch (e) {
+      addToast((e as Error).message, "error");
+    } finally {
+      setWidgetsLoading(false);
+    }
+  };
+
+  const refreshAuditLogs = async (params?: {
+    start_date?: string;
+    end_date?: string;
+    page?: number;
+  }) => {
+    setAuditLoading(true);
+    try {
+      const res = await api.listAuditLogs({ page_size: 15, ...params });
+      setAuditTotal(res.count);
+      setAuditEvents(
+        res.results.map((e) => ({
+          id: e.id,
+          timestamp: e.timestamp,
+          eventType: e.event_type,
+          userId: e.user_id,
+          ipAddress: e.ip_address,
+          details: e.details,
+        })),
+      );
+    } catch (e) {
+      addToast((e as Error).message, "error");
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const login = async (
+    tenantId: string,
+    username: string,
+    password: string,
+  ) => {
+    const res = await api.login(tenantId, username, password);
+    localStorage.setItem("access_token", res.access_token);
+    localStorage.setItem("refresh_token", res.refresh_token);
     setCurrentUser({
+      id: res.user_id,
       username,
-      role,
-      tenantId,
+      role: res.role,
+      tenantId: res.tenant_id,
     });
     setCurrentPage("dashboard");
     addToast("Successfully logged in", "success");
-    // Add audit event
-    const newEvent: AuditEvent = {
-      id: `a-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "auth",
-      actor: username,
-      ipAddress: "192.168.1.100",
-      detail: "Successful login",
-    };
-    setAuditEvents((prev) => [newEvent, ...prev]);
   };
+
   const logout = () => {
-    if (currentUser) {
-      const newEvent: AuditEvent = {
-        id: `a-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "auth",
-        actor: currentUser.username,
-        ipAddress: "192.168.1.100",
-        detail: "Successful logout",
-      };
-      setAuditEvents((prev) => [newEvent, ...prev]);
-    }
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
     setCurrentUser(null);
+    setTenant(null);
+    setWidgets([]);
+    setApiKeys([]);
+    setAuditEvents([]);
     setCurrentPage("login");
   };
+
   const navigate = (page: Page) => {
-    // Role guards
     if (
       (page === "settings" || page === "audit") &&
       currentUser?.role !== "admin"
     ) {
       addToast("Unauthorized access", "error");
-      setCurrentPage("dashboard");
       return;
     }
     setCurrentPage(page);
   };
-  const addToast = (message: string, type: "success" | "error") => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [
-      ...prev,
+
+  // Load data after login
+  useEffect(() => {
+    if (currentUser) {
+      refreshTenant();
+      refreshWidgets();
+    }
+  }, [currentUser?.id]);
+
+  const createWidget = async (data: {
+    name: string;
+    description?: string;
+    metadata?: Record<string, string>;
+  }) => {
+    const w = await api.createWidget(data);
+    setWidgets((prev) => [mapWidget(w), ...prev]);
+  };
+
+  const updateWidget = async (
+    id: string,
+    data: {
+      name: string;
+      description?: string;
+      metadata?: Record<string, string>;
+    },
+  ) => {
+    const w = await api.updateWidget(id, data);
+    setWidgets((prev) => prev.map((x) => (x.id === id ? mapWidget(w) : x)));
+  };
+
+  const deleteWidget = async (id: string) => {
+    await api.deleteWidget(id);
+    setWidgets((prev) => prev.filter((x) => x.id !== id));
+  };
+
+  const generateApiKey = async (): Promise<string> => {
+    if (!currentUser) throw new Error("Not authenticated");
+    const res = await api.generateApiKey(currentUser.id);
+    setApiKeys((prev) => [
       {
-        id,
-        message,
-        type,
+        id: res.key_id,
+        maskedKey: `${res.api_key.slice(0, 10)}••••••••`,
+        createdAt: res.created_at,
       },
+      ...prev,
     ]);
-    setTimeout(() => {
-      removeToast(id);
-    }, 4000);
+    return res.api_key;
   };
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  const revokeApiKey = async (id: string) => {
+    await api.revokeApiKey(id);
+    setApiKeys((prev) => prev.filter((k) => k.id !== id));
   };
+
   return (
     <AppContext.Provider
       value={{
@@ -306,22 +316,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addToast,
         removeToast,
         tenant,
+        tenantLoading,
+        refreshTenant,
         widgets,
-        setWidgets,
+        widgetsLoading,
+        refreshWidgets,
+        createWidget,
+        updateWidget,
+        deleteWidget,
         apiKeys,
-        setApiKeys,
+        generateApiKey,
+        revokeApiKey,
         auditEvents,
-        setAuditEvents,
+        auditLoading,
+        auditTotal,
+        auditPage,
+        setAuditPage,
+        refreshAuditLogs,
       }}
     >
       {children}
     </AppContext.Provider>
   );
 }
+
 export function useApp() {
   const context = useContext(AppContext);
-  if (context === undefined) {
-    throw new Error("useApp must be used within an AppProvider");
-  }
+  if (!context) throw new Error("useApp must be used within an AppProvider");
   return context;
 }

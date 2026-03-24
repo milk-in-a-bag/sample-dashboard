@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useState } from "react";
 import { PackageIcon, PencilIcon, TrashIcon } from "lucide-react";
 import { useApp, type Widget } from "../context/AppContext";
 import { Button } from "../components/ui/Button";
@@ -6,18 +6,16 @@ import { Skeleton } from "../components/ui/Skeleton";
 import { SlideOver } from "../components/ui/SlideOver";
 import { Modal } from "../components/ui/Modal";
 import { WidgetForm, WidgetFormFooter } from "../components/WidgetForm";
+
 export function DashboardPage() {
-  const { widgets, setWidgets, currentUser, addToast, setAuditEvents } =
+  const { widgets, widgetsLoading, deleteWidget, addToast, currentUser } =
     useApp();
-  const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [widgetToDelete, setWidgetToDelete] = useState<Widget | null>(null);
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  const [deleting, setDeleting] = useState(false);
+
   const handleCreate = () => {
     setEditingWidget(null);
     setFormOpen(true);
@@ -30,30 +28,25 @@ export function DashboardPage() {
     setWidgetToDelete(widget);
     setDeleteModalOpen(true);
   };
-  const executeDelete = () => {
-    if (widgetToDelete) {
-      setWidgets((prev) => prev.filter((w) => w.id !== widgetToDelete.id));
+
+  const executeDelete = async () => {
+    if (!widgetToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteWidget(widgetToDelete.id);
       addToast("Widget deleted", "success");
-      // Audit log
-      if (currentUser) {
-        setAuditEvents((prev) => [
-          {
-            id: `a-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            type: "destructive",
-            actor: currentUser.username,
-            ipAddress: "192.168.1.100",
-            detail: `Deleted widget "${widgetToDelete.name}"`,
-          },
-          ...prev,
-        ]);
-      }
+    } catch (e) {
+      addToast((e as Error).message, "error");
+    } finally {
+      setDeleting(false);
+      setDeleteModalOpen(false);
+      setWidgetToDelete(null);
     }
-    setDeleteModalOpen(false);
-    setWidgetToDelete(null);
   };
+
   const isAdmin = currentUser?.role === "admin";
   const isReadOnly = currentUser?.role === "read_only";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -68,56 +61,26 @@ export function DashboardPage() {
           <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
             <thead className="bg-zinc-50 dark:bg-zinc-900/50">
               <tr>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider"
-                >
-                  Name
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider"
-                >
-                  Description
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider"
-                >
-                  Metadata
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider"
-                >
-                  Created
-                </th>
-                <th scope="col" className="relative px-6 py-3">
-                  <span className="sr-only">Actions</span>
-                </th>
+                {["Name", "Description", "Metadata", "Created", ""].map((h) => (
+                  <th
+                    key={h}
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider"
+                  >
+                    {h || <span className="sr-only">Actions</span>}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800">
-              {loading ? (
-                Array.from({
-                  length: 5,
-                }).map((_, i) => (
-                  <tr key={i}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Skeleton variant="line" className="w-32" />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Skeleton variant="line" className="w-64" />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Skeleton variant="line" className="w-16" />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Skeleton variant="line" className="w-24" />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Skeleton variant="line" className="w-12" />
-                    </td>
+              {widgetsLoading ? (
+                Array.from({ length: 5 }, (_, i) => (
+                  <tr key={`skel-${i}`}>
+                    {[32, 64, 16, 24, 12].map((w, j) => (
+                      <td key={j} className="px-6 py-4">
+                        <Skeleton variant="line" className={`w-${w}`} />
+                      </td>
+                    ))}
                   </tr>
                 ))
               ) : widgets.length === 0 ? (
@@ -167,9 +130,7 @@ export function DashboardPage() {
                           </button>
                         )}
                         <button
-                          onClick={() =>
-                            isAdmin ? confirmDelete(widget) : null
-                          }
+                          onClick={() => isAdmin && confirmDelete(widget)}
                           disabled={!isAdmin}
                           className={`transition-colors ${isAdmin ? "text-zinc-400 hover:text-red-600 dark:hover:text-red-400" : "text-zinc-300 dark:text-zinc-700 cursor-not-allowed"}`}
                           title={isAdmin ? "Delete" : "Admin only"}
@@ -186,7 +147,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Widget Form SlideOver */}
       <SlideOver
         open={formOpen}
         onClose={() => setFormOpen(false)}
@@ -194,13 +154,7 @@ export function DashboardPage() {
         footer={
           <WidgetFormFooter
             onCancel={() => setFormOpen(false)}
-            onSave={() => {
-              // We'll trigger a hidden submit button in the form or lift the save logic.
-              // For simplicity, we'll use a document event or ref.
-              // Actually, lifting state to DashboardPage is cleaner, but let's just pass a trigger.
-              const saveBtn = document.getElementById("hidden-save-btn");
-              if (saveBtn) saveBtn.click();
-            }}
+            onSave={() => document.getElementById("hidden-save-btn")?.click()}
           />
         }
       >
@@ -209,13 +163,10 @@ export function DashboardPage() {
             widget={editingWidget}
             onClose={() => setFormOpen(false)}
           />
-
-          {/* Hidden button to trigger save from footer */}
-          <button id="hidden-save-btn" className="hidden" onClick={() => {}} />
+          <button id="hidden-save-btn" className="hidden" />
         </div>
       </SlideOver>
 
-      {/* Delete Confirmation Modal */}
       <Modal
         open={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
@@ -236,7 +187,11 @@ export function DashboardPage() {
             >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={executeDelete}>
+            <Button
+              variant="destructive"
+              onClick={executeDelete}
+              loading={deleting}
+            >
               Delete
             </Button>
           </div>

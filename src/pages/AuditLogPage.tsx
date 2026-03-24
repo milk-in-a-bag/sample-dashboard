@@ -1,26 +1,36 @@
-import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
-import { EventBadge } from '../components/ui/Badge';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import { useEffect, useState } from "react";
+import { useApp } from "../context/AppContext";
+import { Input } from "../components/ui/Input";
+import { Button } from "../components/ui/Button";
+
 export function AuditLogPage() {
-  const { auditEvents } = useApp();
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
-  // Filter logic
-  const filteredEvents = auditEvents.filter((event) => {
-    if (fromDate && new Date(event.timestamp) < new Date(fromDate)) return false;
-    if (toDate && new Date(event.timestamp) > new Date(toDate + 'T23:59:59Z'))
-    return false;
-    return true;
-  });
-  const totalPages = Math.ceil(filteredEvents.length / itemsPerPage) || 1;
-  const paginatedEvents = filteredEvents.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const {
+    auditEvents,
+    auditLoading,
+    auditTotal,
+    auditPage,
+    setAuditPage,
+    refreshAuditLogs,
+  } = useApp();
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const pageSize = 15;
+  const totalPages = Math.ceil(auditTotal / pageSize) || 1;
+
+  useEffect(() => {
+    refreshAuditLogs({
+      page: auditPage,
+      start_date: fromDate ? `${fromDate}T00:00:00Z` : undefined,
+      end_date: toDate ? `${toDate}T23:59:59Z` : undefined,
+    });
+  }, [auditPage, fromDate, toDate]);
+
+  const handleClear = () => {
+    setFromDate("");
+    setToDate("");
+    setAuditPage(1);
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 flex flex-col sm:flex-row items-end gap-4">
@@ -29,26 +39,28 @@ export function AuditLogPage() {
             type="date"
             label="From Date"
             value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)} />
-          
+            onChange={(e) => {
+              setFromDate(e.target.value);
+              setAuditPage(1);
+            }}
+          />
         </div>
         <div className="flex-1 w-full sm:w-auto">
           <Input
             type="date"
             label="To Date"
             value={toDate}
-            onChange={(e) => setToDate(e.target.value)} />
-          
+            onChange={(e) => {
+              setToDate(e.target.value);
+              setAuditPage(1);
+            }}
+          />
         </div>
         <Button
           variant="secondary"
-          onClick={() => {
-            setFromDate('');
-            setToDate('');
-            setCurrentPage(1);
-          }}
-          className="w-full sm:w-auto">
-          
+          onClick={handleClear}
+          className="w-full sm:w-auto"
+        >
           Clear Filters
         </Button>
       </div>
@@ -58,115 +70,109 @@ export function AuditLogPage() {
           <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
             <thead className="bg-zinc-50 dark:bg-zinc-900/50">
               <tr>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                  
-                  Timestamp
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                  
-                  Event Type
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                  
-                  Actor
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                  
-                  IP Address
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                  
-                  Detail
-                </th>
+                {[
+                  "Timestamp",
+                  "Event Type",
+                  "User",
+                  "IP Address",
+                  "Details",
+                ].map((h) => (
+                  <th
+                    key={h}
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider"
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800">
-              {paginatedEvents.length === 0 ?
-              <tr>
+              {auditLoading ? (
+                <tr>
                   <td
-                  colSpan={5}
-                  className="px-6 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  
-                    No audit events found for the selected criteria.
+                    colSpan={5}
+                    className="px-6 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400"
+                  >
+                    Loading...
                   </td>
-                </tr> :
-
-              paginatedEvents.map((event) =>
-              <tr
-                key={event.id}
-                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                
+                </tr>
+              ) : auditEvents.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-6 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400"
+                  >
+                    No audit events found.
+                  </td>
+                </tr>
+              ) : (
+                auditEvents.map((event) => (
+                  <tr
+                    key={event.id}
+                    className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                  >
                     <td className="px-6 py-3 whitespace-nowrap text-sm text-zinc-500 dark:text-zinc-400 font-mono">
                       {new Date(event.timestamp).toLocaleString(undefined, {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                  })}
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
                     </td>
-                    <td className="px-6 py-3 whitespace-nowrap">
-                      <EventBadge type={event.type} />
+                    <td className="px-6 py-3 whitespace-nowrap text-sm font-mono text-zinc-700 dark:text-zinc-300">
+                      {event.eventType}
                     </td>
-                    <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      {event.actor}
+                    <td className="px-6 py-3 whitespace-nowrap text-sm text-zinc-900 dark:text-zinc-100 font-mono">
+                      {event.userId ?? "—"}
                     </td>
                     <td className="px-6 py-3 whitespace-nowrap text-sm text-zinc-500 dark:text-zinc-400 font-mono">
-                      {event.ipAddress}
+                      {event.ipAddress ?? "—"}
                     </td>
                     <td className="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-300 truncate max-w-md">
-                      {event.detail}
+                      {JSON.stringify(event.details)}
                     </td>
                   </tr>
-              )
-              }
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
         <div className="px-6 py-3 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div className="text-sm text-zinc-500 dark:text-zinc-400">
-            Page{' '}
+            Page{" "}
             <span className="font-medium text-zinc-900 dark:text-zinc-100">
-              {currentPage}
-            </span>{' '}
-            of{' '}
+              {auditPage}
+            </span>{" "}
+            of{" "}
             <span className="font-medium text-zinc-900 dark:text-zinc-100">
               {totalPages}
-            </span>
+            </span>{" "}
+            ({auditTotal} total)
           </div>
           <div className="flex gap-2">
             <Button
               variant="secondary"
               size="sm"
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage((p) => p - 1)}>
-              
+              disabled={auditPage === 1}
+              onClick={() => setAuditPage(auditPage - 1)}
+            >
               Previous
             </Button>
             <Button
               variant="secondary"
               size="sm"
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage((p) => p + 1)}>
-              
+              disabled={auditPage === totalPages}
+              onClick={() => setAuditPage(auditPage + 1)}
+            >
               Next
             </Button>
           </div>
         </div>
       </div>
-    </div>);
-
+    </div>
+  );
 }

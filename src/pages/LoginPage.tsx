@@ -1,34 +1,33 @@
-import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import { useState } from "react";
+import { useApp } from "../context/AppContext";
+import { Input } from "../components/ui/Input";
+import { Button } from "../components/ui/Button";
+
 export function LoginPage() {
   const { login, navigate } = useApp();
-  const [tenantId, setTenantId] = useState('acme-corp');
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('password');
-  const [error, setError] = useState('');
+  const [tenantId, setTenantId] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const handleSubmit = (e: React.FormEvent) => {
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     if (!tenantId || !username || !password) {
-      setError('All fields are required');
+      setError("All fields are required");
       return;
     }
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await login(tenantId, username, password);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
       setLoading(false);
-      // Mock role assignment based on username for testing
-      const role = username.includes('read') ?
-      'read_only' :
-      username.includes('user') ?
-      'user' :
-      'admin';
-      login(tenantId, username, role);
-    }, 600);
+    }
   };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-4">
       <div className="w-full max-w-sm">
@@ -47,30 +46,30 @@ export function LoginPage() {
                 onChange={(e) => setTenantId(e.target.value)}
                 placeholder="your-organization"
                 className="font-mono"
-                helperText="Your organization identifier" />
-              
+                helperText="Your organization identifier"
+              />
             </div>
 
             <Input
               label="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin" />
-            
+              placeholder="admin"
+            />
 
             <Input
               label="Password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••" />
-            
+              placeholder="••••••••"
+            />
 
-            {error &&
-            <div className="text-sm text-red-600 dark:text-red-400 font-medium">
+            {error && (
+              <div className="text-sm text-red-600 dark:text-red-400 font-medium">
                 {error}
               </div>
-            }
+            )}
 
             <Button type="submit" className="w-full" loading={loading}>
               Sign in
@@ -79,14 +78,14 @@ export function LoginPage() {
 
           <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-200 dark:border-zinc-800 text-center">
             <button
-              onClick={() => navigate('register')}
-              className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
-              
+              onClick={() => navigate("register")}
+              className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+            >
               Register a new tenant
             </button>
           </div>
         </div>
       </div>
-    </div>);
-
+    </div>
+  );
 }
