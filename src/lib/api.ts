@@ -38,20 +38,34 @@ async function request<T>(
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
 
-  // Auto-refresh on 401 and retry once
-  if (res.status === 401 && !retried) {
+  // Auto-refresh on 401 only when we sent a token (i.e. not during login)
+  if (res.status === 401 && !retried && getToken()) {
     const refreshed = await tryRefresh();
     if (refreshed) return request<T>(path, options, true);
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
-    throw new Error("Session expired. Please log in again.");
+    // Fall through to parse the actual error body below
   }
 
   if (res.status === 204) return undefined as T;
 
   const data = await res.json();
   if (!res.ok) {
-    const message = data?.error?.message ?? data?.detail ?? "Request failed";
+    // Handle { error: { field: "msg" } } and { error: { message: "msg" } } and { detail: "msg" }
+    let message = "Request failed";
+    if (data?.error) {
+      if (typeof data.error === "string") {
+        message = data.error;
+      } else if (typeof data.error.message === "string") {
+        message = data.error.message;
+      } else {
+        // field-level errors like { error: { current_password: "..." } }
+        const first = Object.values(data.error)[0];
+        if (typeof first === "string") message = first;
+      }
+    } else if (data?.detail) {
+      message = data.detail;
+    }
     throw new Error(message);
   }
   return data as T;
@@ -93,6 +107,7 @@ export interface MeResponse {
   username: string;
   email: string;
   role: "admin" | "user" | "read_only";
+  changed_fields?: string[];
 }
 
 export function getMe() {
@@ -101,7 +116,7 @@ export function getMe() {
 
 export function updateMe(data: {
   username?: string;
-  password?: string;
+  new_password?: string;
   current_password?: string;
 }) {
   return request<MeResponse>("/api/auth/me/update/", {

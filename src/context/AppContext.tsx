@@ -97,7 +97,7 @@ interface AppContextType {
   deleteWidget: (id: string) => Promise<void>;
   apiKeys: ApiKey[];
   generateApiKey: () => Promise<string>;
-  revokeApiKey: (id: string) => Promise<void>;
+  revokeApiKey: (id: string) => Promise<{ message: string }>;
   auditEvents: AuditEvent[];
   auditLoading: boolean;
   auditTotal: number;
@@ -114,7 +114,7 @@ interface AppContextType {
   getMe: () => Promise<api.MeResponse>;
   updateMe: (data: {
     username?: string;
-    password?: string;
+    new_password?: string;
     current_password?: string;
   }) => Promise<api.MeResponse>;
   sessionChecked: boolean;
@@ -247,11 +247,10 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
 
   const updateMe = async (data: {
     username?: string;
-    password?: string;
+    new_password?: string;
     current_password?: string;
   }) => {
     const res = await api.updateMe(data);
-    // Keep currentUser in sync if username changed
     if (data.username && currentUser) {
       setCurrentUser((prev) =>
         prev ? { ...prev, username: res.username } : prev,
@@ -394,9 +393,10 @@ export function AppProvider({ children }: { readonly children: ReactNode }) {
     return res.api_key;
   };
 
-  const revokeApiKey = async (id: string) => {
-    await api.revokeApiKey(id);
+  const revokeApiKey = async (id: string): Promise<{ message: string }> => {
+    const res = await api.revokeApiKey(id);
     setApiKeys((prev) => prev.filter((k) => k.id !== id));
+    return res;
   };
 
   return (

@@ -132,7 +132,14 @@ export function AuditLogPage() {
                       {event.ipAddress ?? "—"}
                     </td>
                     <td className="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-300 truncate max-w-md">
-                      {JSON.stringify(event.details)}
+                      {Object.keys(event.details).length === 0
+                        ? "—"
+                        : Object.entries(event.details)
+                            .map(
+                              ([k, v]) =>
+                                `${k}: ${Array.isArray(v) ? (v.length ? v.join(", ") : "none") : String(v)}`,
+                            )
+                            .join(" · ")}
                     </td>
                   </tr>
                 ))

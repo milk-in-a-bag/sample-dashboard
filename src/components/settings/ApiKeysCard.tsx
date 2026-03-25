@@ -32,8 +32,8 @@ export function ApiKeysCard() {
     if (!keyToRevoke) return;
     setRevoking(true);
     try {
-      await revokeApiKey(keyToRevoke.id);
-      addToast("API Key revoked", "success");
+      const res = await revokeApiKey(keyToRevoke.id);
+      addToast(res.message ?? "API Key revoked", "success");
     } catch (e) {
       addToast((e as Error).message, "error");
     } finally {

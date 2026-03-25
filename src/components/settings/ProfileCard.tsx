@@ -32,13 +32,13 @@ export function ProfileCard() {
   const handleSave = async () => {
     const payload: {
       username?: string;
-      password?: string;
+      new_password?: string;
       current_password?: string;
     } = {};
     if (newUsername && newUsername !== meData?.username)
       payload.username = newUsername;
     if (newPassword) {
-      payload.password = newPassword;
+      payload.new_password = newPassword;
       payload.current_password = currentPassword;
     }
     if (!Object.keys(payload).length) {
@@ -47,8 +47,16 @@ export function ProfileCard() {
     }
     setSaving(true);
     try {
-      await updateMe(payload);
-      addToast("Profile updated", "success");
+      const res = await updateMe(payload);
+      const changed = res.changed_fields ?? [];
+      // If API doesn't return changed_fields, infer from what we sent
+      const actualChanged =
+        changed.length > 0
+          ? changed
+          : Object.keys(payload)
+              .filter((k) => k !== "current_password")
+              .map((k) => (k === "new_password" ? "password" : k));
+      addToast(`Updated: ${actualChanged.join(", ")}`, "success");
       setProfileModal(false);
       setCurrentPassword("");
       setNewPassword("");

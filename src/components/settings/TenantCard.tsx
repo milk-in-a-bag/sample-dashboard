@@ -22,8 +22,8 @@ export function TenantCard() {
   const handleDeleteTenant = async () => {
     setDeleting(true);
     try {
-      await api.deleteTenant();
-      addToast("Tenant deletion initiated", "success");
+      const res = await api.deleteTenant();
+      addToast(res.message ?? "Tenant deletion initiated", "success");
       logout();
     } catch (e) {
       addToast((e as Error).message, "error");
