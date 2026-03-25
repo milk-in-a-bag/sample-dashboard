@@ -1,6 +1,6 @@
-# Multi-Tenant SaaS Dashboard
+# Sample Dashboard
 
-A React frontend built to test and demonstrate the [multi-tenant SaaS backend](https://multi-tenant-saas-backend.vercel.app). The backend is hosted separately — this UI exists purely to exercise its API endpoints and verify they work correctly.
+A React frontend built to test and demonstrate the [multi-tenant SaaS backend](https://multi-tenant-saas-backend.vercel.app). The backend is hosted separately, this UI exists purely to exercise its API endpoints and verify they work correctly.
 
 ## Purpose
 
