@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { AppProvider, useApp } from "./context/AppContext";
 import { Sidebar } from "./components/layout/Sidebar";
 import { TopBar } from "./components/layout/TopBar";

@@ -16,7 +16,6 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
   const [metadata, setMetadata] = useState<{ key: string; value: string }[]>(
     [],
   );
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (widget) {
@@ -51,7 +50,6 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
     metadata.forEach((m) => {
       if (m.key.trim()) metaObj[m.key.trim()] = m.value.trim();
     });
-    setSaving(true);
     try {
       if (widget) {
         await updateWidget(widget.id, { name, description, metadata: metaObj });
@@ -63,8 +61,6 @@ export function WidgetForm({ widget, onClose }: WidgetFormProps) {
       onClose();
     } catch (e) {
       addToast((e as Error).message, "error");
-    } finally {
-      setSaving(false);
     }
   };
 

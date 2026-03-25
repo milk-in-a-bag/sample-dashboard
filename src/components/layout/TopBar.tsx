@@ -1,4 +1,3 @@
-import React from "react";
 import { SunIcon, MoonIcon, MenuIcon } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { RoleBadge } from "../ui/Badge";
