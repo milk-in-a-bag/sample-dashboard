@@ -1,73 +1,45 @@
-# React + TypeScript + Vite
+# Multi-Tenant SaaS Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React frontend built to test and demonstrate the [multi-tenant SaaS backend](https://multi-tenant-saas-backend.vercel.app). The backend is hosted separately — this UI exists purely to exercise its API endpoints and verify they work correctly.
 
-Currently, two official plugins are available:
+## Purpose
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+This project is a test client for the backend. Every feature in the UI maps directly to a backend endpoint: authentication, tenant management, widgets, API keys, audit logs, and subscription management. If something works here, it works in the API.
 
-## React Compiler
+## What are Widgets?
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Widgets are a placeholder — a demo resource to show how tenant-isolated CRUD works in the backend. They don't represent anything specific in the real world.
 
-## Expanding the ESLint configuration
+The idea is: when you build your actual product, you replace "widgets" with whatever your real resource is (orders, invoices, projects, etc.). The widget code is there to demonstrate the patterns — tenant isolation, role-based access, audit logging — all wired up and working on a concrete example.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Stack
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- React 19 + TypeScript
+- Vite 8
+- Tailwind CSS v4
+- No external state management — plain React context
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Getting Started
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Create a `.env.local` file if you need to override the API base URL (defaults to the hosted backend):
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+VITE_API_BASE=https://multi-tenant-saas-backend.vercel.app
+```
+
+## Features Covered
+
+- Tenant registration and login (username or email)
+- JWT auth with silent token refresh
+- Tenant config, subscription tier management, and deletion
+- Widget CRUD (create, list, edit, delete)
+- API key generation and revocation
+- Audit log browsing with date filtering and pagination
+- Profile editing (username + password change)
+- Backend health monitoring (polled every 60s)
+- Role-based access control (admin-only pages)
